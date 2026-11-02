@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>학교 교복창고 대여 신청</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col" x-data="studentApp()">
+
+    <!-- 헤더 -->
+    <header class="bg-indigo-600 text-white shadow-md">
+        <div class="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                🏫 학교 교복창고 대여 신청
+            </h1>
+            <span class="text-xs bg-indigo-700 px-3 py-1.5 rounded-full">
+                오늘: <span x-text="today"></span>
+            </span>
+        </div>
+    </header>
+
+    <!-- 메인 컨테이너 -->
+    <main class="max-w-6xl mx-auto px-4 py-6 flex-grow w-full">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <!-- 왼쪽: 교복 대여 신청 -->
+            <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
+                <h2 class="text-lg font-bold text-indigo-600 mb-4 flex items-center gap-2">
+                    ✍️ 교복 대여 신청
+                </h2>
+                <form @submit.prevent="addRental" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">학번</label>
+                        <input type="text" x-model="form.studentId" placeholder="예: 20315" required
+                            class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">이름</label>
+                        <input type="text" x-model="form.studentName" placeholder="예: 홍길동" required
+                            class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">교복 구분</label>
+                        <select x-model="form.category" @change="updateSubItems()" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <template x-for="(items, cat) in categories" :key="cat">
+                                <option :value="cat" x-text="cat"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">세부 품목</label>
+                        <select x-model="form.subItem" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <template x-for="item in currentSubItems" :key="item">
+                                <option :value="item" x-text="item"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">대여일</label>
+                        <input type="date" x-model="form.rentalDate" required
+                            class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <button type="submit" 
+                        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg transition">
+                        대여 신청하기
+                    </button>
+                </form>
+            </section>
+
+            <!-- 오른쪽: 내 대여/반납 조회 -->
+            <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
+                <h2 class="text-lg font-bold text-indigo-600 mb-4 flex items-center gap-2">
+                    🔍 내 대여/반납 조회
+                </h2>
+                <p class="text-xs text-slate-500 mb-4">본인의 학번과 이름을 입력하여 현재 진행 상태를 확인하세요.</p>
+                
+                <div class="space-y-3 mb-6">
+                    <input type="text" x-model="searchStudent.id" placeholder="학번 입력 (예: 20315)" 
+                        class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <input type="text" x-model="searchStudent.name" placeholder="이름 입력 (예: 홍길동)" 
+                        class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <button @click="searchMyRentals" 
+                        class="w-full bg-slate-800 hover:bg-slate-900 text-white font-semibold py-2 rounded-lg text-sm transition">
+                        조회하기
+                    </button>
+                </div>
+
+                <!-- 조회 결과 영역 -->
+                <div x-show="hasSearched">
+                    <h3 class="text-sm font-bold text-slate-700 mb-2 border-b pb-1">조회 결과</h3>
+                    <div class="space-y-2 max-h-60 overflow-y-auto">
+                        <template x-for="item in myResults" :key="item.id">
+                            <div class="p-3 bg-slate-50 border rounded-lg flex justify-between items-center text-sm">
+                                <div>
+                                    <span class="font-semibold text-indigo-600" x-text="item.category + ' (' + item.subItem + ')'"></span>
+                                    <div class="text-xs text-slate-400" x-text="'대여일: ' + item.rentalDate"></div>
+                                    <div class="text-xs text-slate-400" x-show="item.manager" x-text="'담당자: ' + item.manager"></div>
+                                </div>
+                                <div>
+                                    <span x-show="item.status === 'pending'" class="px-2.5 py-1 text-xs font-semibold bg-indigo-100 text-indigo-700 rounded-full">
+                                        승인대기
+                                    </span>
+                                    <span x-show="item.status === 'rented'" class="px-2.5 py-1 text-xs font-semibold bg-amber-100 text-amber-700 rounded-full">
+                                        대여중
+                                    </span>
+                                    <span x-show="item.status === 'returned'" class="px-2.5 py-1 text-xs font-semibold bg-emerald-100 text-emerald-700 rounded-full">
+                                        반납완료
+                                    </span>
+                                </div>
+                            </div>
+                        </template>
+                        <template x-if="myResults.length === 0">
+                            <p class="text-center text-sm text-slate-400 py-6">해당 학생의 대여 기록이 없습니다.</p>
+                        </template>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer class="bg-white border-t py-4 text-center text-xs text-slate-400">
+        &copy; 학교 교복창고 관리 시스템. All rights reserved.
+    </footer>
+
+    <script>
+        function studentApp() {
+            return {
+                today: new Date().toISOString().split('T')[0],
+                categories: {
+                    '동복 교복': ['자켓', '조끼', '바지', '셔츠', '넥타이'],
+                    '하복 교복': ['상의', '하의'],
+                    '생활복': ['상의', '하의'],
+                    '동복 체육복': ['상의', '하의'],
+                    '하복 체육복': ['상의', '하의']
+                },
+                currentSubItems: [],
+                form: {
+                    studentId: '',
+                    studentName: '',
+                    category: '동복 교복',
+                    subItem: '자켓',
+                    rentalDate: new Date().toISOString().split('T')[0]
+                },
+                searchStudent: { id: '', name: '' },
+                myResults: [],
+                hasSearched: false,
+
+                init() {
+                    this.updateSubItems();
+                },
+
+                updateSubItems() {
+                    this.currentSubItems = this.categories[this.form.category] || [];
+                    this.form.subItem = this.currentSubItems[0] || '';
+                },
+
+                addRental() {
+                    let rentals = [];
+                    const saved = localStorage.getItem('school_uniform_rentals_v10');
+                    if (saved) {
+                        try { rentals = JSON.parse(saved); } catch(e) {}
+                    }
+
+                    const newEntry = {
+                        id: Date.now(),
+                        studentId: this.form.studentId,
+                        studentName: this.form.studentName,
+                        category: this.form.category,
+                        subItem: this.form.subItem,
+                        rentalDate: this.form.rentalDate,
+                        status: 'pending',
+                        manager: '',
+                        returnDate: ''
+                    };
+                    rentals.unshift(newEntry);
+                    localStorage.setItem('school_uniform_rentals_v10', JSON.stringify(rentals));
+
+                    this.form.studentId = '';
+                    this.form.studentName = '';
+                    alert('교복 대여 신청이 완료되었습니다! 관리자 승인 후 대여 처리됩니다.');
+                },
+
+                searchMyRentals() {
+                    if (!this.searchStudent.id.trim() || !this.searchStudent.name.trim()) {
+                        alert('학번과 이름을 모두 입력해주세요.');
+                        return;
+                    }
+                    let rentals = [];
+                    const saved = localStorage.getItem('school_uniform_rentals_v10');
+                    if (saved) {
+                        try { rentals = JSON.parse(saved); } catch(e) {}
+                    }
+
+                    const qId = this.searchStudent.id.trim();
+                    const qName = this.searchStudent.name.trim();
+
+                    this.myResults = rentals.filter(r => r.studentId === qId && r.studentName === qName);
+                    this.hasSearched = true;
+                }
+            }
+        }
+    </script>
+</body>
+</html>

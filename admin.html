@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>학교 교복창고 관리자 시스템</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col" x-data="adminApp()">
+
+    <!-- 헤더 -->
+    <header class="bg-slate-900 text-white shadow-md">
+        <div class="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                🔒 교복창고 관리자 대시보드
+            </h1>
+            <div class="flex items-center gap-3">
+                <span class="text-xs bg-slate-800 px-3 py-1.5 rounded-full" x-text="'로그인 계정: ' + currentAdminName + (isSuperAdmin ? ' (최고관리자)' : '')"></span>
+                <button @click="logout" class="text-xs bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-lg font-semibold transition">
+                    로그아웃
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 컨테이너 -->
+    <main class="max-w-6xl mx-auto px-4 py-6 flex-grow w-full">
+        
+        <!-- 관리자 계정 관리 (최고관리자 전용) -->
+        <div x-show="isSuperAdmin" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6 space-y-4">
+            <h3 class="text-md font-bold text-indigo-600 flex items-center gap-2">
+                👑 최고 관리자 전용: 관리자 계정 관리
+            </h3>
+            
+            <form @submit.prevent="addNewAdmin" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <input type="text" x-model="newAdmin.name" placeholder="일반 관리자 이름" required
+                    class="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <input type="password" x-model="newAdmin.password" placeholder="비밀번호 입력" required
+                    class="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg text-sm transition">
+                    일반 관리자 등록하기
+                </button>
+            </form>
+
+            <form @submit.prevent="changeSuperPassword" class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t">
+                <input type="password" x-model="superPwForm.current" placeholder="현재 비밀번호" required
+                    class="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <input type="password" x-model="superPwForm.newPw" placeholder="새 비밀번호 입력" required
+                    class="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2 rounded-lg text-sm transition">
+                    최고관리자 비번 변경
+                </button>
+            </form>
+
+            <div class="text-xs text-slate-600 border-t pt-3">
+                <span class="font-semibold text-slate-700">등록된 관리자 목록:</span>
+                <div class="flex flex-wrap gap-2 mt-2">
+                    <template x-for="(admin, idx) in adminAccounts" :key="admin.name">
+                        <div class="flex items-center gap-1 bg-slate-100 px-2.5 py-1 rounded-lg border">
+                            <span class="font-medium" x-text="admin.name"></span>
+                            <span class="text-indigo-600 font-semibold" x-show="admin.isSuper">(최고)</span>
+                            <button type="button" x-show="!admin.isSuper" @click="deleteAdmin(admin.name)" 
+                                class="text-rose-500 hover:text-rose-700 font-bold ml-1 px-1">
+                                ×
+                            </button>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- 대여 관리 대시보드 -->
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col">
+            
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b pb-4">
+                <div class="flex flex-wrap gap-2">
+                    <button @click="currentTab = 'pending'" 
+                        :class="currentTab === 'pending' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                        class="px-3.5 py-2 rounded-lg font-medium text-sm transition">
+                        승인대기 (<span x-text="pendingCount"></span>)
+                    </button>
+                    <button @click="currentTab = 'rented'" 
+                        :class="currentTab === 'rented' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                        class="px-3.5 py-2 rounded-lg font-medium text-sm transition">
+                        대여중 (<span x-text="rentedCount"></span>)
+                    </button>
+                    <button @click="currentTab = 'returned'" 
+                        :class="currentTab === 'returned' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                        class="px-3.5 py-2 rounded-lg font-medium text-sm transition">
+                        반납완료 (<span x-text="returnedCount"></span>)
+                    </button>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button @click="exportToExcel" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-2 rounded-lg font-medium transition">
+                        📊 엑셀 다운로드
+                    </button>
+                    <label class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-2 rounded-lg font-medium transition cursor-pointer">
+                        📂 엑셀 불러오기
+                        <input type="file" accept=".csv" @change="importFromExcel" class="hidden">
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex justify-between items-center mb-4 gap-2">
+                <input type="text" x-model="adminSearchQuery" placeholder="관리자 검색 (학번 또는 이름)..." 
+                    class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <button @click="resetData" class="text-xs text-slate-400 hover:text-rose-600 whitespace-nowrap underline">
+                    초기화
+                </button>
+            </div>
+
+            <div class="overflow-x-auto flex-grow">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-600 border-b">
+                            <th class="py-2.5 px-3 font-semibold">학번</th>
+                            <th class="py-2.5 px-3 font-semibold">이름</th>
+                            <th class="py-2.5 px-3 font-semibold">대여 품목</th>
+                            <th class="py-2.5 px-3 font-semibold">대여일 / 반납일</th>
+                            <th class="py-2.5 px-3 font-semibold">등록자(담당자)</th>
+                            <th class="py-2.5 px-3 font-semibold text-center">관리 작업</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        <template x-for="item in filteredAdminRentals" :key="item.id">
+                            <tr class="hover:bg-slate-50">
+                                <td class="py-3 px-3 font-mono text-slate-600" x-text="item.studentId"></td>
+                                <td class="py-3 px-3 font-medium" x-text="item.studentName"></td>
+                                <td class="py-3 px-3">
+                                    <span class="font-medium text-slate-700" x-text="item.category"></span>
+                                    <span class="text-xs text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded ml-1" x-text="item.subItem"></span>
+                                </td>
+                                <td class="py-3 px-3 text-xs text-slate-500">
+                                    <div>대여: <span x-text="item.rentalDate"></span></div>
+                                    <div x-show="item.returnDate">반납: <span x-text="item.returnDate"></span></div>
+                                </td>
+                                <td class="py-3 px-3 text-slate-600" x-text="item.manager || '-'"></td>
+                                <td class="py-3 px-3 text-center">
+                                    <button x-show="item.status === 'pending'" @click="approveItem(item.id)"
+                                        class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded transition font-medium">
+                                        승인하기
+                                    </button>
+                                    <button x-show="item.status === 'rented'" @click="returnItem(item.id)"
+                                        class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded transition font-medium">
+                                        반납완료
+                                    </button>
+                                    <span x-show="item.status === 'returned'" class="text-xs text-slate-400 font-medium">
+                                        처리완료
+                                    </span>
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-if="filteredAdminRentals.length === 0">
+                            <tr>
+                                <td colspan="6" class="py-8 text-center text-slate-400">
+                                    해당 상태의 내역이 없습니다.
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-white border-t py-4 text-center text-xs text-slate-400">
+        &copy; 학교 교복창고 관리 시스템. All rights reserved.
+    </footer>
+
+    <script>
+        function adminApp() {
+            return {
+                currentAdminName: '',
+                isSuperAdmin: false,
+                adminAccounts: [{ name: '신미선', hash: '', isSuper: true }],
+                newAdmin: { name: '', password: '' },
+                superPwForm: { current: '', newPw: '' },
+                currentTab: 'pending',
+                adminSearchQuery: '',
+                rentals: [],
+
+                async init() {
+                    const defaultSuperHash = await this.hashPassword('1234');
+                    this.adminAccounts[0].hash = defaultSuperHash;
+
+                    const savedAdmins = localStorage.getItem('school_uniform_admins_v3');
+                    if (savedAdmins) {
+                        try { 
+                            const parsed = JSON.parse(savedAdmins);
+                            const superAdminIndex = parsed.findIndex(a => a.name === '신미선');
+                            if (superAdminIndex === -1) {
+                                parsed.unshift({ name: '신미선', hash: defaultSuperHash, isSuper: true });
+                            } else {
+                                parsed[superAdminIndex].isSuper = true;
+                            }
+                            this.adminAccounts = parsed; 
+                        } catch(e) {}
+                    }
+
+                    const savedRentals = localStorage.getItem('school_uniform_rentals_v10');
+                    if (savedRentals) {
+                        try { this.rentals = JSON.parse(savedRentals); } catch(e) {}
+                    }
+
+                    // 페이지가 완전히 로드된 직후 로그인 창 띄우기
+                    setTimeout(() => {
+                        this.checkLogin();
+                    }, 100);
+                },
+
+                async hashPassword(password) {
+                    const msgBuffer = new TextEncoder().encode(password);
+                    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+                    const hashArray = Array.from(new Uint8Array(hashBuffer));
+                    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                },
+
+                async checkLogin() {
+                    const adminNameInput = prompt('관리자 이름을 입력하세요:\n(등록된 관리자 목록: ' + this.adminAccounts.map(a => a.name).join(', ') + ')');
+                    if (!adminNameInput) {
+                        location.href = 'index.html';
+                        return;
+                    }
+
+                    const foundAdmin = this.adminAccounts.find(a => a.name === adminNameInput.trim());
+                    if (!foundAdmin) {
+                        alert('등록되지 않은 관리자 이름입니다.');
+                        this.checkLogin();
+                        return;
+                    }
+
+                    const pwInput = prompt(`[${foundAdmin.name}] 관리자의 비밀번호를 입력하세요:`);
+                    if (pwInput === null) {
+                        location.href = 'index.html';
+                        return;
+                    }
+
+                    const inputHash = await this.hashPassword(pwInput);
+                    if (inputHash === foundAdmin.hash) {
+                        this.currentAdminName = foundAdmin.name;
+                        this.isSuperAdmin = foundAdmin.isSuper;
+                        alert(`${foundAdmin.name}님 환영합니다!`);
+                    } else {
+                        alert('비밀번호가 일치하지 않습니다.');
+                        this.checkLogin();
+                    }
+                },
+
+                logout() {
+                    location.href = 'index.html';
+                },
+
+                async addNewAdmin() {
+                    if (!this.isSuperAdmin) return;
+                    const name = this.newAdmin.name.trim();
+                    const pw = this.newAdmin.password;
+                    if (!name || !pw) return;
+
+                    if (this.adminAccounts.some(a => a.name === name)) {
+                        alert('이미 존재하는 관리자 이름입니다.');
+                        return;
+                    }
+
+                    const hashedPw = await this.hashPassword(pw);
+                    this.adminAccounts.push({ name: name, hash: hashedPw, isSuper: false });
+                    localStorage.setItem('school_uniform_admins_v3', JSON.stringify(this.adminAccounts));
+
+                    this.newAdmin.name = '';
+                    this.newAdmin.password = '';
+                    alert(`[${name}] 일반 관리자가 성공적으로 등록되었습니다!`);
+                },
+
+                async changeSuperPassword() {
+                    if (!this.isSuperAdmin) return;
+                    const currentHash = await this.hashPassword(this.superPwForm.current);
+                    const superAdminObj = this.adminAccounts.find(a => a.name === '신미선');
+
+                    if (!superAdminObj || currentHash !== superAdminObj.hash) {
+                        alert('현재 비밀번호가 일치하지 않습니다.');
+                        return;
+                    }
+
+                    if (!this.superPwForm.newPw.trim()) {
+                        alert('새 비밀번호를 입력해주세요.');
+                        return;
+                    }
+
+                    superAdminObj.hash = await this.hashPassword(this.superPwForm.newPw);
+                    localStorage.setItem('school_uniform_admins_v3', JSON.stringify(this.adminAccounts));
+
+                    this.superPwForm.current = '';
+                    this.superPwForm.newPw = '';
+                    alert('최고 관리자 비밀번호가 성공적으로 변경되었습니다!');
+                },
+
+                deleteAdmin(adminName) {
+                    if (!this.isSuperAdmin) return;
+                    if (adminName === '신미선') {
+                        alert('최고 관리자는 삭제할 수 없습니다.');
+                        return;
+                    }
+                    if (confirm(`[${adminName}] 관리자를 삭제하시겠습니까?`)) {
+                        this.adminAccounts = this.adminAccounts.filter(a => a.name !== adminName);
+                        localStorage.setItem('school_uniform_admins_v3', JSON.stringify(this.adminAccounts));
+                        alert('삭제되었습니다.');
+                    }
+                },
+
+                saveRentals() {
+                    localStorage.setItem('school_uniform_rentals_v10', JSON.stringify(this.rentals));
+                },
+
+                approveItem(id) {
+                    const item = this.rentals.find(r => r.id === id);
+                    if (item) {
+                        item.status = 'rented';
+                        item.manager = this.currentAdminName;
+                        this.saveRentals();
+                    }
+                },
+
+                returnItem(id) {
+                    const item = this.rentals.find(r => r.id === id);
+                    if (item) {
+                        item.status = 'returned';
+                        item.returnDate = new Date().toISOString().split('T')[0];
+                        this.saveRentals();
+                    }
+                },
+
+                exportToExcel() {
+                    if (this.rentals.length === 0) {
+                        alert('내보낼 데이터가 없습니다.');
+                        return;
+                    }
+                    let csvContent = "\uFEFF";
+                    csvContent += "학번,이름,교복구분,세부품목,대여일,상태,등록자,반납일\n";
+
+                    this.rentals.forEach(r => {
+                        let statusStr = '승인대기';
+                        if (r.status === 'rented') statusStr = '대여중';
+                        if (r.status === 'returned') statusStr = '반납완료';
+
+                        const row = [
+                            `"${r.studentId}"`, `"${r.studentName}"`, `"${r.category}"`,
+                            `"${r.subItem}"`, `"${r.rentalDate}"`,
+                            `"${statusStr}"`, `"${r.manager || ''}"`, `"${r.returnDate || ''}"`
+                        ].join(",");
+                        csvContent += row + "\n";
+                    });
+
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", `교복대여현황.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                },
+
+                importFromExcel(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const text = e.target.result;
+                        const lines = text.split('\n');
+                        const newRentals = [];
+
+                        for (let i = 1; i < lines.length; i++) {
+                            const line = lines[i].trim();
+                            if (!line) continue;
+                            const cols = line.split(',').map(col => col.replace(/^"|"$/g, ''));
+                            if (cols.length >= 5) {
+                                let statusVal = 'pending';
+                                if (cols[5] === '대여중') statusVal = 'rented';
+                                if (cols[5] === '반납완료') statusVal = 'returned';
+
+                                newRentals.push({
+                                    id: Date.now() + i,
+                                    studentId: cols[0], studentName: cols[1],
+                                    category: cols[2], subItem: cols[3],
+                                    rentalDate: cols[4],
+                                    status: statusVal, manager: cols[6] || '',
+                                    returnDate: cols[7] || ''
+                                });
+                            }
+                        }
+
+                        if (newRentals.length > 0) {
+                            if (confirm(`엑셀 파일에서 ${newRentals.length}개의 기록을 불러왔습니다. 기존 데이터에 추가하시겠습니까?`)) {
+                                this.rentals = [...newRentals, ...this.rentals];
+                                this.saveRentals();
+                                alert('성공적으로 불러왔습니다!');
+                            }
+                        } else {
+                            alert('올바른 파일 형식이 아닙니다.');
+                        }
+                        event.target.value = '';
+                    };
+                    reader.readAsText(file, 'utf-8');
+                },
+
+                resetData() {
+                    if (confirm('모든 대여 기록을 초기 상태로 되돌리시겠습니까?')) {
+                        localStorage.removeItem('school_uniform_rentals_v10');
+                        location.reload();
+                    }
+                },
+
+                get pendingCount() { return this.rentals.filter(r => r.status === 'pending').length; },
+                get rentedCount() { return this.rentals.filter(r => r.status === 'rented').length; },
+                get returnedCount() { return this.rentals.filter(r => r.status === 'returned').length; },
+
+                get filteredAdminRentals() {
+                    let list = this.rentals.filter(r => r.status === this.currentTab);
+                    
+                    if (this.adminSearchQuery.trim() !== '') {
+                        const q = this.adminSearchQuery.toLowerCase();
+                        list = list.filter(r => 
+                            r.studentId.toLowerCase().includes(q) || 
+                            r.studentName.toLowerCase().includes(q)
+                        );
+                    }
+                    return list;
+                }
+            }
+        }
+    </script>
+</body>
+</html>
